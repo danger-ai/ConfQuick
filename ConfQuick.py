@@ -4,12 +4,12 @@ from dotty_dict.dotty_dict import dotty
 import os
 import re
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 class ConfQuick:
     def __init__(self, app_name: str = "general", default_defs: Optional[dict] = None,
-                 notes: Optional[dict] = None, custom_file_path: str = None, django=False):
+                 notes: Optional[dict] = None, custom_file_path: str = None, django=False, debug=False):
         """
         Initialize and load the ConfQuick object. if no arguments are supplied, example values will be used
         :param app_name: used to generate config file names, examples and the initial django secret key
@@ -18,10 +18,11 @@ class ConfQuick:
         :param custom_file_path: by default, the file name is generated from the app name and placed in the base folder
         :param django: True if the config file is meant for use by django. (Auto-generates a secret key)
         """
+        self.debug = debug
         if type(custom_file_path) is not str:
-            this_file = f"{BASE_DIR}/{app_name}-conf.yaml"
+            self.conf_file = f"{BASE_DIR}/{app_name}-conf.yaml"
         else:
-            this_file = custom_file_path
+            self.conf_file = custom_file_path
         self.conf = bd()
         self.default_conf = default_defs if type(default_defs) is dict else {
             f'{app_name}': {
@@ -38,22 +39,24 @@ class ConfQuick:
             }
         } if app_name == 'general' else {}
         self.conf_notes = notes if type(notes) is dict else {}
-        if os.path.exists(this_file):
-            self._conf = bd.from_yaml(this_file)
+        if os.path.exists(self.conf_file):
+            self._conf = bd.from_yaml(self.conf_file)
             result = self.apply(merge=True)
-            print(f"Loaded {this_file.split('/')[-1]}!")
+            if self.debug:
+                print(f"Loaded {self.conf_file.split('/')[-1]}!")
             if result:
                 print("Warning: Encountered the following issues:")
                 print("\n".join(result))
         else:
-            print("Configuration file not found.")
+            if self.debug:
+                print("Configuration file not found.")
             self._conf = bd(self.default_conf)
             self.apply(merge=False)
 
         # finally, check for the django secret key
         if django and not self.get(f'{app_name}.secret_key'):
             self.set(f'{app_name}.secret_key', self.random_string(50), apply=False)
-            self.save(this_file)
+            self.save(self.conf_file)
             raise Exception("Configuration is incomplete. A new Secret Key value was generated. "
                             "Please ensure all configuration has been set before continuing.")
 
@@ -128,11 +131,13 @@ class ConfQuick:
         if apply:
             self.apply()
 
-    def save(self, config_file):
+    def save(self, config_file=None):
         """
         Save current configuration to a file
         :param config_file: the file path
         """
+        if config_file is None:
+            config_file = self.conf_file
         self._conf.to_yaml(filepath=config_file)
 
     def apply(self, merge=True):
